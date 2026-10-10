@@ -1,0 +1,274 @@
+@import 'tailwindcss';
+
+/*
+ * Supanova "Vantablack Luxe" 를 업무용 지도 대시보드에 맞춰 옮긴 것.
+ *  - 배경은 흑연 회색 #2b2d31 위에 아주 옅은 빛 번짐 두 개와 노이즈 질감. 순수 검정·보라/파랑 AI 그라데이션은 쓰지 않는다.
+ *  - 카드는 이중 베젤(.bezel > .bezel-core): 바깥 얇은 유리 테두리 + 안쪽 면. 회색 1px 테두리·거친 그림자 금지.
+ *  - 강조색은 하나(--color-dest, 채도 80% 미만의 불씨색). 분석 목적지 마커도 같은 색이다.
+ *  - 움직임은 cubic-bezier(0.16,1,0.3,1) 하나로 통일. transform·opacity 만 움직인다.
+ * 랜딩 페이지 기준의 큰 여백(py-24 이상)은 업무 화면 밀도에 맞지 않아 쓰지 않았다.
+ */
+@theme {
+  --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+
+  /* 흑연 회색 — 검정은 눈에 잘 들어오지 않아 한 단계씩 밝힌 회색 표면으로 바꿨다 (bg < panel < elev < hover) */
+  --color-bg: #2b2d31;
+  --color-panel: #34373c;
+  --color-elev: #3e4147;
+  --color-hover: #484b52;
+  --color-line: rgb(255 255 255 / 0.11);
+  --color-line-soft: rgb(255 255 255 / 0.07);
+  --color-fg: #f3f4f6;
+  --color-dim: #cdd0d5;
+  --color-mute: #a1a5ad;
+  --color-dest: #e65a43;
+  --color-ok: #5fd39a;
+  --color-warn: #e9bf5c;
+
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-rise: rise 0.8s var(--ease-spring) both;
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(0.75rem);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/* 유리 — 떠 있는 내비·지도 컨트롤 (다른 클래스에서 @apply 하므로 utility 로 정의) */
+@utility glass {
+  background-color: rgb(52 55 60 / 0.8);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.12),
+    0 8px 24px -12px rgb(20 21 24 / 0.5);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+@layer base {
+  html {
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+    color-scheme: dark;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'ss06';
+  }
+  body {
+    background:
+      radial-gradient(60rem 40rem at -10% -20%, rgb(230 90 67 / 0.08), transparent 60%),
+      radial-gradient(50rem 36rem at 110% 120%, rgb(255 255 255 / 0.05), transparent 60%),
+      var(--color-bg);
+  }
+  /* 노이즈 질감 — 평평한 검정에 결을 준다 */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-fg);
+    outline-offset: 2px;
+  }
+  input[type='checkbox'] {
+    accent-color: var(--color-fg);
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.1);
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+@layer components {
+  /* 이중 베젤 카드 */
+  .bezel {
+    @apply rounded-[1.5rem] bg-white/[0.05] p-1.5 ring-1 ring-white/[0.1];
+  }
+  .bezel-core {
+    @apply rounded-[calc(1.5rem-0.375rem)] bg-panel shadow-[inset_0_1px_1px_rgba(255,255,255,0.09)];
+  }
+  .eyebrow {
+    @apply inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1 text-[11px] font-medium tracking-[0.12em] text-dim;
+  }
+  .eyebrow-accent {
+    @apply bg-dest/10 text-dest;
+  }
+  .panel-h {
+    @apply text-[13px] font-semibold tracking-tight text-fg;
+  }
+  .side-h {
+    @apply mb-3;
+  }
+
+  .input {
+    @apply rounded-xl bg-elev px-3 py-2 text-sm text-fg ring-1 ring-line outline-none transition-[box-shadow,background-color] duration-500 ease-spring placeholder:text-mute focus:bg-hover focus:ring-white/25;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg transition-transform duration-500 ease-spring hover:scale-[1.02] active:scale-[0.98] disabled:scale-100 disabled:bg-elev disabled:text-mute disabled:ring-1 disabled:ring-line;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-elev px-4 py-2 text-sm text-fg ring-1 ring-line transition-transform duration-500 ease-spring hover:scale-[1.02] hover:bg-hover active:scale-[0.98] disabled:scale-100 disabled:text-mute;
+  }
+  /* 버튼 안 버튼 — 화살표는 작은 원 안에 둔다 */
+  .btn-nub {
+    @apply -mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/10 transition-transform duration-500 ease-spring;
+  }
+  .group:hover .btn-nub {
+    transform: translateX(3px);
+  }
+
+  .chip {
+    @apply rounded-full bg-elev px-3 py-1.5 text-xs text-dim ring-1 ring-line transition-[transform,background-color,color] duration-500 ease-spring hover:bg-hover hover:text-fg active:scale-[0.97];
+  }
+  .chip-on {
+    @apply bg-fg font-semibold text-bg ring-fg hover:bg-fg hover:text-bg;
+  }
+
+  .list-row {
+    @apply flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-fg transition-colors duration-300 ease-spring hover:bg-hover;
+  }
+  .stat {
+    @apply rounded-2xl bg-elev px-3.5 py-3 ring-1 ring-line;
+  }
+  .stat-label {
+    @apply mb-1 text-[11px] text-mute;
+  }
+
+  .map-ctl-group {
+    @apply glass flex flex-col overflow-hidden rounded-2xl;
+  }
+  .map-ctl {
+    @apply flex h-9 min-w-9 items-center justify-center gap-1.5 px-2.5 text-fg transition-colors duration-300 ease-spring border-t border-white/10 first:border-t-0 hover:bg-white/10 disabled:text-mute;
+  }
+  .map-ctl-text {
+    @apply justify-start text-xs;
+  }
+
+  .reveal {
+    animation: var(--animate-rise);
+    animation-delay: calc(var(--i, 0) * 80ms);
+  }
+}
+
+/* ── 지도 마커 (카카오 CustomOverlay 안의 HTML) ── */
+.mk-host {
+  cursor: pointer;
+}
+.mk {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mk-host:hover .mk {
+  transform: scale(1.12);
+}
+.mk svg {
+  display: block;
+  filter: drop-shadow(0 2px 3px rgb(20 21 24 / 0.35));
+}
+.mk-focus::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border: 2px solid #2b2d31;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 2px #fff;
+}
+.mk-badge {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translate(4px, -50%);
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: rgb(43 45 49 / 0.92);
+  color: #fff;
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+.mk-failed {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fdf3d6;
+  border: 2px solid #a8761c;
+  color: #6f4c0f;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+}
+.mk-dest,
+.mk-pin {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.mk-label {
+  position: absolute;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.mk-label-dest {
+  bottom: calc(100% + 6px);
+  padding: 5px 10px 5px 8px;
+  border-radius: 9999px;
+  background: rgb(43 45 49 / 0.94);
+  color: #fff;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.12),
+    0 8px 24px -8px rgb(20 21 24 / 0.45);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mk-label-dest::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 9999px;
+  background: #e65a43;
+  vertical-align: 1px;
+}

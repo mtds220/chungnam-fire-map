@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-server
+.env
+*.tsbuildinfo
+
+# 디자인 참고용으로 복사해 둔 Supanova 저장소 내용 — 앱 소스가 아니므로 올리지 않는다
+examples/
+output-skill/
+redesign-skill/
+research/
+soft-skill/
+taste-skill/
