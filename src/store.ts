@@ -38,6 +38,12 @@ interface State {
   hideOver: boolean
   showAllPaths: boolean
 
+  /** 반경 원 — 분석 후 목적지와 출발 1~5순위 둘레에 그린다 */
+  radiusOn: boolean
+  radiusKm: number
+  /** 개별로 끈 원 (목적지 id 또는 관서 id). 목적지가 바뀌면 비운다. */
+  radiusHidden: Set<string>
+
   /** 분석 목적지 — 관서 또는 지도에서 찍은 지점 */
   dest: Destination | null
   /** 정보 창을 띄운 관서 */
@@ -68,6 +74,7 @@ interface State {
   rerun: () => Promise<void>
   loadPath: (originId: string) => Promise<void>
   clearPaths: () => void
+  toggleRadius: (id: string) => void
   command: (kind: NonNullable<State['mapCommand']>['kind'], ids?: string[]) => void
 }
 
@@ -81,7 +88,7 @@ export const useStore = create<State>()((set, get) => {
       return
     }
     get().cancel()
-    set({ dest, focusId: null, paths: {}, pathError: null, showAllPaths: false })
+    set({ dest, focusId: null, paths: {}, pathError: null, showAllPaths: false, radiusHidden: new Set() })
     if (dest) get().command('focusDest')
   }
 
@@ -101,6 +108,9 @@ export const useStore = create<State>()((set, get) => {
     limitMin: 30,
     hideOver: false,
     showAllPaths: false,
+    radiusOn: true,
+    radiusKm: 5,
+    radiusHidden: new Set(),
 
     dest: null,
     focusId: null,
@@ -234,6 +244,14 @@ export const useStore = create<State>()((set, get) => {
 
     clearPaths: () => set({ paths: {}, showAllPaths: false, pathError: null }),
 
+    toggleRadius: (id) => {
+      const next = new Set(get().radiusHidden)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      // 전체가 꺼져 있을 때 하나를 켜면 전체 스위치도 켠다 — 누른 원이 바로 보이도록
+      set(next.has(id) ? { radiusHidden: next } : { radiusHidden: next, radiusOn: true })
+    },
+
     command: (kind, ids) => set({ mapCommand: { kind, ids, seq: ++seq } }),
   }
 })
@@ -255,6 +273,34 @@ function analysisOf(s: State, dest: Destination | null): Analysis {
     originTypes: effectiveOriginTypes(s.originTypes, s.visibleTypes),
     skipSpeedKmh: s.config?.skipSpeedKmh ?? 150,
   })
+}
+
+export interface RadiusTarget {
+  id: string
+  /** 0 = 목적지, 1~5 = 출발 관서 순위 */
+  rank: number
+  name: string
+  lat: number
+  lng: number
+  stationType?: StationType
+}
+
+/** 반경 원을 그릴 대상: 분석 결과가 있을 때 목적지 + 이동시간 1~5순위 (지도·사이드바가 함께 쓴다) */
+export function radiusTargetsOf(analysis: Analysis): RadiusTarget[] {
+  const ranked = analysis.rows.filter((r) => r.result?.status === 'ok').slice(0, 5)
+  const dest = analysis.dest
+  if (!dest || ranked.length === 0) return []
+  return [
+    { id: dest.id, rank: 0, name: dest.name, lat: dest.lat, lng: dest.lng, stationType: dest.stationType },
+    ...ranked.map((r, i) => ({
+      id: r.station.id,
+      rank: i + 1,
+      name: r.station.name,
+      lat: r.station.lat!,
+      lng: r.station.lng!,
+      stationType: r.station.type,
+    })),
+  ]
 }
 
 /** 현재 목적지·조건의 분석 결과. 지도·카드·표가 모두 이것을 읽는다. */

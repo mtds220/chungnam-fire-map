@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { searchPlaces, type Place } from '../map/geocode'
-import { legendShape } from '../map/markers'
-import { PRESET_MINUTES, useAnalysis, useStore } from '../store'
+import { legendShape, SELECTED_COLOR } from '../map/markers'
+import { PRESET_MINUTES, radiusTargetsOf, useAnalysis, useStore } from '../store'
 import { STATION_TYPES, STATION_TYPE_KEYS } from '../types'
 import Icon from './Icon'
 
@@ -99,7 +99,116 @@ export default function Sidebar({ onPicked }: { onPicked?: () => void }) {
       </section>
 
       <RunBox pending={analysis.stats.pending} targets={analysis.stats.targets} />
+
+      {s.dest && <RadiusControls />}
     </div>
+  )
+}
+
+const RADIUS_PRESETS = [3, 5, 10]
+
+/** 반경 원 — 전체 켜기/끄기, 반경(km), 원마다 켜기/끄기 */
+function RadiusControls() {
+  const radiusOn = useStore((s) => s.radiusOn)
+  const radiusKm = useStore((s) => s.radiusKm)
+  const radiusHidden = useStore((s) => s.radiusHidden)
+  const set = useStore((s) => s.set)
+  const toggleRadius = useStore((s) => s.toggleRadius)
+  const targets = radiusTargetsOf(useAnalysis())
+  const setKm = (v: number) => {
+    if (Number.isFinite(v)) set({ radiusKm: Math.min(30, Math.max(0.5, Math.round(v * 10) / 10)) })
+  }
+
+  return (
+    <section className="p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <SectionTag icon="radar-2-linear">반경 표시</SectionTag>
+        <button
+          type="button"
+          aria-pressed={radiusOn}
+          aria-label="반경 원 전체 켜기/끄기"
+          onClick={() => set({ radiusOn: !radiusOn })}
+          className={`-mt-3 flex h-5 w-9 items-center rounded-full p-0.5 transition-colors duration-500 ease-spring ${radiusOn ? 'bg-fg' : 'bg-white/10'}`}
+        >
+          <span className={`h-4 w-4 rounded-full transition-transform duration-500 ease-spring ${radiusOn ? 'translate-x-4 bg-bg' : 'bg-mute'}`} />
+        </button>
+      </div>
+
+      <div className={`transition-opacity duration-500 ease-spring ${radiusOn ? '' : 'pointer-events-none opacity-40'}`}>
+        <div className="mb-2 flex items-center gap-2">
+          <input
+            type="range"
+            min={0.5}
+            max={20}
+            step={0.5}
+            value={Math.min(radiusKm, 20)}
+            onChange={(e) => setKm(Number(e.target.value))}
+            aria-label="반경 (km)"
+            className="flex-1 accent-[#f3f4f6]"
+          />
+          <label className="flex items-center gap-1 rounded-full bg-elev px-2.5 py-1 text-xs ring-1 ring-line">
+            <input
+              type="number"
+              min={0.5}
+              max={30}
+              step={0.5}
+              value={radiusKm}
+              onChange={(e) => setKm(Number(e.target.value))}
+              aria-label="반경 직접 입력 (km)"
+              className="w-10 bg-transparent text-right tabular-nums outline-none"
+            />
+            km
+          </label>
+        </div>
+        <div className="mb-3 flex gap-1.5">
+          {RADIUS_PRESETS.map((km) => (
+            <button
+              key={km}
+              type="button"
+              className={`chip tabular-nums ${radiusKm === km ? 'chip-on' : ''}`}
+              aria-pressed={radiusKm === km}
+              onClick={() => setKm(km)}
+            >
+              {km}km
+            </button>
+          ))}
+        </div>
+
+        {targets.length === 0 ? (
+          <p className="text-[11px] leading-relaxed text-mute">분석을 실행하면 목적지와 출발 관서 1~5순위에 반경 원이 그려집니다.</p>
+        ) : (
+          <>
+            <div className="flex flex-col gap-1">
+              {targets.map((t) => {
+                const on = !radiusHidden.has(t.id)
+                const color = t.rank === 0 ? SELECTED_COLOR : t.stationType ? STATION_TYPES[t.stationType].color : SELECTED_COLOR
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggleRadius(t.id)}
+                    className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-xs transition-[background-color,opacity] duration-500 ease-spring hover:bg-hover ${
+                      on ? '' : 'opacity-40'
+                    }`}
+                  >
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full"
+                      style={{ border: `2px ${t.rank === 0 ? 'solid' : 'dashed'} ${color}`, background: `${color}22` }}
+                      aria-hidden="true"
+                    />
+                    <span className="w-9 shrink-0 tabular-nums text-mute">{t.rank === 0 ? '목적지' : `${t.rank}위`}</span>
+                    <span className="flex-1 truncate">{t.name}</span>
+                    <Icon name={on ? 'eye-linear' : 'eye-closed-linear'} size={14} className="text-mute" />
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-2 text-[11px] text-mute">지도에서 원이 있는 관서·지점을 눌러도 켜고 끌 수 있습니다.</p>
+          </>
+        )}
+      </div>
+    </section>
   )
 }
 

@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom'
 import { loadKakaoMaps, type Kakao } from '../map/loadKakao'
 import { reverseGeocode } from '../map/geocode'
 import { markerHtml, pointPinHtml, SELECTED_COLOR, zIndexOf, type MarkerRole } from '../map/markers'
-import { useAnalysis, useStore } from '../store'
+import { radiusTargetsOf, useAnalysis, useStore } from '../store'
 import type { Station } from '../types'
+import { STATION_TYPES } from '../types'
 import Icon from './Icon'
 import InfoCard from './InfoCard'
 import MapControls from './MapControls'
@@ -27,6 +28,9 @@ export default function MapView() {
   const paths = useStore((s) => s.paths)
   const showAllPaths = useStore((s) => s.showAllPaths)
   const mapCommand = useStore((s) => s.mapCommand)
+  const radiusOn = useStore((s) => s.radiusOn)
+  const radiusKm = useStore((s) => s.radiusKm)
+  const radiusHidden = useStore((s) => s.radiusHidden)
   const analysis = useAnalysis()
 
   const boxRef = useRef<HTMLDivElement>(null)
@@ -37,6 +41,9 @@ export default function MapView() {
   const destOverlayRef = useRef<Kakao>(null)
   const infoOverlayRef = useRef<Kakao>(null)
   const linesRef = useRef<Kakao[]>([])
+  const circlesRef = useRef<Kakao[]>([])
+  /** 반경 원이 걸린 관서 id — 마커 클릭 핸들러가 읽는다 */
+  const radiusIdsRef = useRef(new Set<string>())
   const infoEl = useMemo(() => document.createElement('div'), [])
 
   const [ready, setReady] = useState(false)
@@ -95,6 +102,8 @@ export default function MapView() {
           el.className = 'mk-host'
           el.addEventListener('click', () => {
             const s = useStore.getState()
+            // 반경 원이 있는 관서(1~5순위)는 누르면 원을 켜고 끈다. 정보 창은 오른쪽 목록 행에서 연다.
+            if (radiusIdsRef.current.has(st.id)) return s.toggleRadius(st.id)
             s.set({ focusId: s.focusId === st.id ? null : st.id })
           })
           const overlay = new maps.CustomOverlay({
@@ -178,10 +187,17 @@ export default function MapView() {
     destOverlayRef.current = null
     if (!dest) return
     const st = dest.kind === 'station' ? stations.find((s) => s.id === dest.id) : undefined
+    // 목적지를 누르면 목적지 반경 원을 켜고 끈다 (분석 결과가 있어 원이 있을 때만)
+    const el = document.createElement('div')
+    el.className = 'mk-host'
+    el.innerHTML = st ? markerHtml(st, { role: 'dest', focused: false, durationSec: null }) : pointPinHtml(dest.address || dest.name)
+    el.addEventListener('click', () => {
+      if (radiusIdsRef.current.has(dest.id)) useStore.getState().toggleRadius(dest.id)
+    })
     // 관서는 도형 중심이, 지점은 핀 끝이 좌표에 오도록 놓는다. CustomOverlay 는 yAnchor 를 바꿀 수 없어 매번 새로 만든다.
     const ov = new maps.CustomOverlay({
       position: new maps.LatLng(dest.lat, dest.lng),
-      content: st ? markerHtml(st, { role: 'dest', focused: false, durationSec: null }) : pointPinHtml(dest.address || dest.name),
+      content: el,
       yAnchor: st ? 0.5 : 1,
       zIndex: 20,
       clickable: true,
@@ -189,6 +205,35 @@ export default function MapView() {
     ov.setMap(mapRef.current)
     destOverlayRef.current = ov
   }, [ready, dest, stations])
+
+  // ── 3-1. 반경 원: 목적지 + 출발 1~5순위 ──────────────────────────────────
+  const radiusTargets = useMemo(() => radiusTargetsOf(analysis), [analysis])
+  useEffect(() => {
+    radiusIdsRef.current = new Set(radiusTargets.map((t) => t.id))
+    if (!ready) return
+    const { maps } = kakaoRef.current
+    circlesRef.current.forEach((c) => c.setMap(null))
+    circlesRef.current = []
+    if (!radiusOn) return
+    for (const t of radiusTargets) {
+      if (radiusHidden.has(t.id)) continue
+      const isDest = t.rank === 0
+      const color = isDest ? SELECTED_COLOR : t.stationType ? STATION_TYPES[t.stationType].color : SELECTED_COLOR
+      const circle = new maps.Circle({
+        center: new maps.LatLng(t.lat, t.lng),
+        radius: radiusKm * 1000,
+        strokeWeight: isDest ? 2.5 : 2,
+        strokeColor: color,
+        strokeOpacity: isDest ? 0.95 : 0.8,
+        strokeStyle: isDest ? 'solid' : 'shortdash',
+        fillColor: color,
+        fillOpacity: isDest ? 0.1 : 0.06,
+        zIndex: isDest ? 2 : 1,
+      })
+      circle.setMap(mapRef.current)
+      circlesRef.current.push(circle)
+    }
+  }, [ready, radiusTargets, radiusOn, radiusKm, radiusHidden])
 
   // ── 4. 정보 창 ─────────────────────────────────────────────────────────
   const focusStation = focusId ? stations.find((s) => s.id === focusId) : undefined
